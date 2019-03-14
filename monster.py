@@ -1,17 +1,21 @@
 from random import choice, random, randint
 
 class Game:
-    def __init__(self, playersIds=[], totalTurns = 7):
+    def __init__(self, totalTurns = 7):
         self.inactiveMonsters = []
         self.players = []
-        self.playersIds = playersIds
+        self.playersIds = []
         self.playersDict = {}
         self.genMonsters()
+
 
         self.fullMoon = False
         self.totalFullMoons = 0
         self.turn = 0
         self.totalTurns = totalTurns
+
+        # Telegram Variables
+        self.chat_id = None
 
     def initialize(self):
         self.assignMonsters()
@@ -44,24 +48,30 @@ class Game:
             self.playersDict[i] = monster
             self.inactiveMonsters.remove(monster)
 
-    def addPlayer(self, playerId):
-        # 0 Added
-        # 1 Already There
-        # 2 No more monsters
-
-        if playerId in self.playerId:
+    def checkIfAddable(self, playerId):
+        if playerId in self.playersIds:
             return 1
-        
-        if self.inactiveMonsters == []:
-            return 2
 
-        monster = choice(self.inactiveMonsters)
-        self.players.append(monster)
-        monster.playerId = playerId
-        monster.gameState = self
-        self.playersDict[playerId] = monster
-        self.playersIds.append(playerId)
+        if len(self.players) >= 7:
+            return 2
+        
         return 0
+
+
+    def addPlayer(self, playerId, playerName):
+
+        # Choose monster
+        monster = choice(self.inactiveMonsters)
+        # Set Game
+        self.playersIds.append(playerId)
+        self.players.append(monster)
+        self.playersDict[playerId] = monster
+        self.inactiveMonsters.remove(monster)
+        # Set monster
+        monster.playerId = playerId
+        monster.playerName = playerName
+        monster.gameState = self
+        return monster
 
     # Turn Phases
     def startGame(self):
@@ -139,6 +149,7 @@ class Game:
             p.endGame(players)
         self.orderPlayers()
 
+    # Choices
     def makeChoice(self, chooserId, choiceId):
         chooser = self.playersDict[chooserId]
         choice = self.playersDict[choiceId]
@@ -150,12 +161,20 @@ class Game:
         self.revealFirstPlace()
         self.endRound()
 
+    # Score Strings
     def strPositions(self):
         return str([p.emoji for p in self.players])
 
     def strScores(self):
         return str([str(p.playerId) + " " + p.emoji + " " + str(p.showScore()) for p in self.players])
 
+    # Object Management
+    def deletePlayers(self):
+        for p in self.players:
+            del p
+        for p in self.inactiveMonsters:
+            del p
+        
     # Start Game
 
     #*Start Round
@@ -176,6 +195,7 @@ class Player:
         self.name = "Name"
         self.playerId = None
         self.gameState = None
+        self.playerName = "Anonymous"
 
         # Score Variables
         self.hearts = 0
@@ -259,7 +279,7 @@ class Player:
                 self.__dict__[curse].victims.add(matchedBy)
 
     def gameInfo(self):
-        string = str(self.playerId) + "\n"
+        string = str(self.playerName) + "\n"
         string += "I am the " + self.name + " " + self.emoji + self.emoji + self.emoji + "\n"
         string += self.description + "\n"
         string += self.extraInfo() + "\n"
@@ -277,7 +297,7 @@ class Player:
         
         for p in self.gameState.players:
             if self != p and p.revealed:
-                string += str(p.playerId) + " is the " + p.name + " " + p.emoji + p.emoji + p.emoji
+                string += str(p.playerName) + " is the " + p.name + " " + p.emoji + p.emoji + p.emoji
                 string += '\n'
                 string += p.alert(self)
                 string += '\n'
@@ -290,11 +310,26 @@ class Player:
     def extraInfo(self):
         return ""
 
+    def buildChoiceMenu(self):
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+        buttonList = []
+
+        for p in self.gameState.players:
+            if p != self:
+                buttonList.append(InlineKeyboardButton(
+                    p.playerName, callback_data=p.playerId))
+
+        reply_markup = InlineKeyboardMarkup(build_menu(buttonList,
+                                                n_cols=3))
+
+        return reply_markup
+
 class Witch(Player):
     def __init__(self):
         Player.__init__(self)
         self.name = "Witch"
-        self.description = "The Witch takes a hair from each new player they date.\n" + \
+        self.description = "The Witch takes a hair from each new player they date.\n\n" + \
             "When revealed, the Witch receives two bonus hearts for every hair collected."
         self.emoji = u"\U0001F9D9"
         self.hairsPlucked = 0
@@ -319,13 +354,13 @@ class Witch(Player):
             return "Now that you know she will not be able to take a hair from your head now!"
 
     def extraInfo(self):
-        return "You plucked the hair of " + " ".join([str(v.playerId) for v in self.victims])
+        return "You plucked the hair of " + " ".join([str(v.playerName) for v in self.victims])
 
 class Vampire(Player):
     def __init__(self):
         Player.__init__(self)
         self.name = "Vampire"
-        self.description = "Everyone the Vampire dates becomes a vampire thrall. And then do so the people they date!\n" + \
+        self.description = "Everyone the Vampire dates becomes a vampire thrall. And then do so the people they date!\n\n" + \
             "At the end, the Vampire collects one heart from every vampire thrall."
         self.emoji = u"\U0001F9DB"
         self.vampire_Thrall = self
@@ -346,14 +381,14 @@ class Vampire(Player):
             return ("Every vampire will give him an extra heart. And everybody he, or other vampire, will become a vampire, Beware!")
 
     def extraInfo(self):
-        return " ".join([str(v.playerId) for v in self.victims]) + " are Vampire Thralls."
+        return " ".join([str(v.playerName) for v in self.victims]) + " are Vampire Thralls."
 
 class Puppet(Player):
     def __init__(self):
         Player.__init__(self)
         self.name = "Ventriloquist Puppet"
         self.description = "Sad people love puppets\n" + \
-            "The puppet gets two bonus heart every time they date someone that was rejected the night before."
+            "\nThe puppet gets two bonus heart every time they date someone that was rejected the night before."
         self.emoji = u"\U0001F921"
 
     def match(self, matchedBy):
@@ -370,7 +405,7 @@ class TwoFaced(Player):
         Player.__init__(self)
         self.name = "Two Faced Creep"
         self.description = "The Two Faced Creep obtains two extra hearts for every player they reject...\n" + \
-            "But ONLY on nights they successfully get a date."
+            "\nBut ONLY on nights they successfully get a date."
         self.emoji = u"\U0001F3AD"
         self.matchedThisTurn = False
 
@@ -400,7 +435,7 @@ class Leprechaun(Player):
         Player.__init__(self)
         self.name = "Leprechaun"
         self.description = "Everyone who dates an unrevealed Leprechaun gets 2 hearts and 2 fake hearts.\n" + \
-            "When the Leprechaun is revealed all fake hearts disappear. At this moment, leprechauns get 2 bonus hearts for every player that drops in the rankings"
+            "\nWhen the Leprechaun is revealed all fake hearts disappear. At this moment, leprechauns get 2 bonus hearts for every player that drops in the rankings"
         self.emoji = u"\U0001F340"
         self.revealedThisRound = False
     
@@ -484,7 +519,7 @@ class Alien(Player):
     def __init__(self):
         Player.__init__(self)
         self.name = "Alien"
-        self.description = "The Alien needs to conduct lengthy experiments on many terrestrials. \nEvery time the Alien successfully dates 3 new players its heart tally doubles"
+        self.description = "The Alien needs to conduct lengthy experiments on many terrestrials. \n\nEvery time the Alien successfully dates 3 new players its heart tally doubles"
         self.emoji = u"\U0001F47D"
         self.abducted = []
     
@@ -501,13 +536,13 @@ class Alien(Player):
         return "The alien wants your vital organs for his collections! The more monsters he dates, the more hearts he gains!"
 
     def extraInfo(self):
-        return "You have abducted " + " ".join([str(v.playerId) for v in self.abducted]) + " so far."
+        return "You have abducted " + " ".join([str(v.playerName) for v in self.abducted]) + " so far."
 
 class Zombie(Player):
     def __init__(self):
         Player.__init__(self)
         self.name = "Zombie"
-        self.description = "Everyone the Zombie dates becomes an infected zobie. And then do so the people they date!\n" + \
+        self.description = "Everyone the Zombie dates becomes an infected zobie. And then do so the people they date!\n\n" + \
             "At the end, if EVERYONE has been infected, it's the end of the world and only the original zombie wins."
         self.emoji = u"\U0001F9DF"
         self.zombie_Virus = self
@@ -525,7 +560,7 @@ class Zombie(Player):
             return "He's the Patient Zero! He wants to infect every single monster, Zombieism is rampant!"
 
     def extraInfo(self):
-        return " ".join([str(v.playerId) for v in self.victims]) + " are Zombies."
+        return " ".join([str(v.playerName) for v in self.victims]) + " are Zombies."
 
 class SerialKiller(Player):
     def __init__(self):
@@ -554,8 +589,8 @@ class SerialKiller(Player):
             return "This guy is not to be trusted! Two dates will be enough for him to extract all your innards."       
 
     def extraInfo(self):
-        marks = " ".join([str(v.playerId) for v in self.marks]) + " are your marks. Another date and you'll get those hearts!" if self.marks != [] else "No marks so far."
-        kills = " ".join([str(v.playerId) for v in self.kills]) + " are crying for the hearts you took from them." if self.kills != [] else "No kills so far."
+        marks = " ".join([str(v.playerName) for v in self.marks]) + " are your marks. Another date and you'll get those hearts!" if self.marks != [] else "No marks so far."
+        kills = " ".join([str(v.playerName) for v in self.kills]) + " are crying for the hearts you took from them." if self.kills != [] else "No kills so far."
 
         return marks + "\n" + kills
 
@@ -581,10 +616,10 @@ class VengefulSpirit(Player):
         if other == self.lover:
             return "This Spirit was your former lover! He wants you to suffer! (Which means, to get rejected)"
         else:
-            return "This Spirit was " + str(self.lover.playerId) + "'s former lover!"
+            return "This Spirit was " + str(self.lover.playerName) + "'s former lover!"
 
     def extraInfo(self):
-        return str(self.lover.playerId) + " is your former lover. Make him suffer!"
+        return str(self.lover.playerName) + " is your former lover. Make him suffer!"
 
 class Invisible(Player):
     def __init__(self):
@@ -613,7 +648,7 @@ class Werewolf(Player):
         Player.__init__(self)
         self.name = "Werewolf"
         self.description = "The Werewolves get two bonus heart when dating on a FULL MOON and then turn their date into a Werewolf! (Stops being whatever monster it used to be).\n" + \
-            "If a werewolf is rejected on a full moon, they lose one heart."
+            "\nIf a werewolf is rejected on a full moon, they lose one heart."
         self.emoji = u"\U0001F43A"
         self.ogWerewolf = True
     
@@ -664,7 +699,7 @@ class Mummy(Player):
     def __init__(self):
         Player.__init__(self)
         self.name = "Mummy"
-        self.description = "Everyone the Mummy dates becomes cursed. Then so do the players they date. \n" + \
+        self.description = "Everyone the Mummy dates becomes cursed. Then so do the players they date. \n\n" + \
             "At the end, the Mummy steals a heart from every cursed player. But if EVERYONE has been cursed then the curse is lifted and no hearts are stolen."
         self.emoji = u"\U00002625"
         self.mummy_Curse = self
@@ -686,14 +721,14 @@ class Mummy(Player):
             return "There's a Mummy Curse around! If you date somebody with the Mummy Curse, you'll be cursed too and the Mummy will steal a heart from you! Unless EVERYBODY is cursed!"
     
     def extraInfo(self):
-        return " ".join([str(v.playerId) for v in self.victims]) + " are Cursed."
+        return " ".join([str(v.playerName) for v in self.victims]) + " are Cursed."
 
 class Frankenstein(Player):
     def __init__(self):
         Player.__init__(self)
         self.name = "Frankenstein Monster"
         self.description = "Frankenstein's Monster has always been misunderstood, he only wanted to give love. \n" + \
-            "Everyone who dates Frankenstein's Monster has a SMALL CHANCE of getting two bonus hearts. Frankie's Monster might get two bonus hearts randomly too, but the chance is higher."
+            "\nEveryone who dates Frankenstein's Monster has a SMALL CHANCE of getting two bonus hearts. Frankie's Monster might get two bonus hearts randomly too, but the chance is higher."
         self.emoji = u"\U000026A1"
 
     def match(self, matchedBy):
@@ -711,6 +746,17 @@ class Frankenstein(Player):
 def makeBulkChoice(game, choices):
     for (c, t) in choices:
         game.makeChoice(c, t)
+
+# build button list from keyboard buttons
+def build_menu(buttons, n_cols,
+               header_buttons=None, footer_buttons=None):
+    menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
+    if header_buttons:
+        menu.insert(0, header_buttons)
+    if footer_buttons:
+        menu.insert(footer_buttons)
+    return menu
+
 
 if __name__ == "__main__":
     game = Game([1,2,3,4,5,6,7,8])
