@@ -31,6 +31,30 @@ def main():
         )
     )
 
+    dp.add_handler(
+        CommandHandler(
+            'newgame',
+            newgame
+        )
+    )
+
+    updater.start_polling()
+    updater.idle()
+
+def newgame(update, context):
+    print(context.)
+    chat_id = update.message.chat_id
+    key = "game" + chat_id
+    if not key in context.chat_data:
+        game = Game()
+        context.bot.sendMessage(
+            chat_id=chat_id, 
+            text="Game created. Every player has to join the game with the //join command.\nThe game creator can join too and they can start the game with the command //startgame")
+    else:
+
+
+    
+
 if __name__ == "__main__":
     logging.basicConfig(format='\n %(asctime)s \n %(name)s \n %(levelname)s \n %(message)s',
                         level=logging.INFO)

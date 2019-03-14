@@ -1,18 +1,20 @@
 from random import choice, random, randint
 
 class Game:
-    def __init__(self, playersIds, totalTurns = 7):
+    def __init__(self, playersIds=[], totalTurns = 7):
         self.inactiveMonsters = []
         self.players = []
         self.playersIds = playersIds
         self.playersDict = {}
         self.genMonsters()
-        self.assignMonsters()
 
         self.fullMoon = False
         self.totalFullMoons = 0
         self.turn = 0
         self.totalTurns = totalTurns
+
+    def initialize(self):
+        self.assignMonsters()
 
     def genMonsters(self):
         w = Witch()
@@ -41,6 +43,25 @@ class Game:
             monster.gameState = self
             self.playersDict[i] = monster
             self.inactiveMonsters.remove(monster)
+
+    def addPlayer(self, playerId):
+        # 0 Added
+        # 1 Already There
+        # 2 No more monsters
+
+        if playerId in self.playerId:
+            return 1
+        
+        if self.inactiveMonsters == []:
+            return 2
+
+        monster = choice(self.inactiveMonsters)
+        self.players.append(monster)
+        monster.playerId = playerId
+        monster.gameState = self
+        self.playersDict[playerId] = monster
+        self.playersIds.append(playerId)
+        return 0
 
     # Turn Phases
     def startGame(self):
@@ -693,6 +714,7 @@ def makeBulkChoice(game, choices):
 
 if __name__ == "__main__":
     game = Game([1,2,3,4,5,6,7,8])
+    game.assignMonsters()
     game.startGame()
 
     game.startRound()
